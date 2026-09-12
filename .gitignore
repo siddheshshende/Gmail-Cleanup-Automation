@@ -1,0 +1,11 @@
+# OAuth client secret downloaded from Google Cloud Console.
+# Anyone with this file could impersonate your app's OAuth client.
+credentials.json
+
+# Generated OAuth token/refresh token for YOUR Gmail account.
+# Anyone with this file could read/modify your Gmail without a password.
+token.json
+
+node_modules/
+.env
+.DS_Store

@@ -1,0 +1,24 @@
+{
+  "name": "gmail-cleanup",
+  "version": "1.0.0",
+  "description": "A safe, local CLI tool for bulk-inspecting and cleaning up Gmail using the official Gmail API.",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "count": "node index.js count",
+    "preview": "node index.js preview",
+    "delete": "node index.js delete",
+    "delete:dry": "node index.js delete --dry-run",
+    "lint": "node --check index.js && node --check src/auth.js && node --check src/gmail.js && node --check src/utils.js && node --check src/commands/count.js && node --check src/commands/preview.js && node --check src/commands/delete.js"
+  },
+  "dependencies": {
+    "@google-cloud/local-auth": "^3.0.1",
+    "googleapis": "^144.0.0"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
