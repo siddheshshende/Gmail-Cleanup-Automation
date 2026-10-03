@@ -252,10 +252,11 @@ counting different units. `count` and `preview` print a reminder of this.
   per-page maximum), following `nextPageToken` until Gmail reports no more
   pages — this is how the tool scales to tens of thousands of messages
   without hitting the ~100-result ceiling of the Gmail web UI.
-- Trashing is done via `messages.batchModify`, adding the `TRASH` label (and
-  removing `INBOX`/`UNREAD`) — the documented, batch-capable equivalent of
-  trashing many messages at once. `messages.delete` (permanent deletion) is
-  never called.
+- Trashing is done via `messages.batchModify`, adding the `TRASH` label and
+  removing `INBOX` — the documented, batch-capable equivalent of trashing many
+  messages at once. `messages.delete` (permanent deletion) is never called.
+  The `UNREAD` label is left untouched, so restoring a message from Trash
+  brings back its original read/unread state.
 - Batches default to **50 message IDs per request** (well under Gmail's
   1000-ID batch limit, to stay comfortably under rate limits). Configurable
   via the `GMAIL_BATCH_SIZE` environment variable, e.g.:
@@ -265,11 +266,17 @@ counting different units. `count` and `preview` print a reminder of this.
 - Batches are processed **sequentially**, not in parallel, to avoid
   triggering Gmail API rate limits.
 - If a batch fails, it's retried with exponential backoff (up to 4 attempts)
-  for transient errors (HTTP 429 / 5xx). If it still fails, that batch is
-  recorded as failed and the tool **moves on** to the remaining batches
-  rather than aborting the whole run. The final summary reports exact
-  success/failure counts. Re-running the same command is safe — messages
-  already moved to Trash no longer match an `in:inbox` query.
+  for transient errors (HTTP 429 / 5xx).
+- If the batch still fails, the tool re-sends each of its messages
+  **individually** via `messages.modify` before giving up on any of them.
+  `batchModify` is all-or-nothing per request, so a single stale ID would
+  otherwise take down its whole batch (and a `400` is not retryable). This way
+  one bad ID costs one message, not 50, and only genuinely bad IDs are counted
+  as failures.
+- Messages that fail even individually are recorded and the tool **moves on**
+  to the remaining batches rather than aborting the whole run. The final
+  summary reports exact success/failure counts. Re-running the same command is
+  safe — messages already moved to Trash no longer match an `in:inbox` query.
 
 ## Environment variables
 

@@ -1,17 +1,10 @@
-// Reusable Gmail API operations: listing message IDs across pages, sampling
-// metadata for preview, and trashing messages in controlled batches.
-
 import { google } from 'googleapis';
 import { sleep } from './utils.js';
 
-// Gmail's own maximum for messages.list per request. Requesting more than
-// this is ignored/clamped by the API, so we ask for the max to minimize the
 // number of pages needed for large mailboxes.
 const MAX_PAGE_SIZE = 500;
 
-// Gmail API batchModify accepts up to 1000 IDs per call, but we default to a
-// smaller, safer batch size to stay comfortably under per-user rate limits
-// and to keep failures cheap to retry.
+
 export const DEFAULT_BATCH_SIZE = Number(process.env.GMAIL_BATCH_SIZE) || 50;
 
 const MAX_RETRIES = 4;
@@ -19,13 +12,10 @@ const BASE_BACKOFF_MS = 500;
 
 function isRetryable(err) {
   const status = err?.code || err?.response?.status;
-  // 429 = rate limited, 5xx = transient server error, both worth retrying.
   return status === 429 || (status >= 500 && status < 600);
 }
 
-// Wraps a Gmail API call with limited exponential backoff. Intentionally
-// bounded (MAX_RETRIES) rather than infinite, so a persistent failure
-// surfaces instead of hanging the CLI forever.
+
 async function withRetry(fn) {
   let attempt = 0;
   for (;;) {
@@ -79,10 +69,7 @@ export async function listAllMessageIds(gmail, query, onPage) {
   return ids;
 }
 
-/**
- * Fetches lightweight metadata (From/Subject only) for a small sample of
- * message IDs, for preview purposes. Never fetches full message bodies.
- */
+
 export async function getMessageSample(gmail, ids, sampleSize = 10) {
   const sampleIds = ids.slice(0, sampleSize);
   const results = [];
@@ -109,13 +96,20 @@ export async function getMessageSample(gmail, ids, sampleSize = 10) {
   return results;
 }
 
+const TRASH_LABEL_PATCH = {
+  addLabelIds: ['TRASH'],
+  removeLabelIds: ['INBOX'],
+};
+
 /**
  * Moves messages to Trash in batches by adding the TRASH label via
  * messages.batchModify (the documented, batch-capable equivalent of
  * messages.trash for many messages at once). Never calls messages.delete.
  *
- * Continues past a failed batch rather than aborting the whole run; failed
- * IDs are reported back so the caller can show accurate success/fail counts.
+ * batchModify is all-or-nothing per request, so if a batch fails (e.g. one
+ * stale ID produces a non-retryable 400) we retry that batch one message at a
+ * time instead of writing off the whole chunk. Only genuinely bad IDs are
+ * reported as failures, so success/fail counts stay accurate.
  *
  * @param {object} gmail
  * @param {string[]} ids
@@ -131,6 +125,12 @@ export async function trashMessages(gmail, ids, opts = {}) {
   let failedCount = 0;
   const failedIds = [];
 
+  const report = () => {
+    if (onProgress) {
+      onProgress({ processed, total: ids.length, success: successCount, failed: failedCount });
+    }
+  };
+
   for (let i = 0; i < ids.length; i += batchSize) {
     const chunk = ids.slice(i, i + batchSize);
 
@@ -138,22 +138,32 @@ export async function trashMessages(gmail, ids, opts = {}) {
       await withRetry(() =>
         gmail.users.messages.batchModify({
           userId: 'me',
-          requestBody: {
-            ids: chunk,
-            addLabelIds: ['TRASH'],
-            removeLabelIds: ['INBOX', 'UNREAD'],
-          },
+          requestBody: { ids: chunk, ...TRASH_LABEL_PATCH },
         })
       );
       successCount += chunk.length;
+      processed += chunk.length;
+      report();
     } catch {
-      failedCount += chunk.length;
-      failedIds.push(...chunk);
-    }
+ 
+      for (const id of chunk) {
+        try {
+          await withRetry(() =>
+            gmail.users.messages.modify({
+              userId: 'me',
+              id,
+              requestBody: TRASH_LABEL_PATCH,
+            })
+          );
+          successCount += 1;
+        } catch {
+          failedCount += 1;
+          failedIds.push(id);
+        }
 
-    processed += chunk.length;
-    if (onProgress) {
-      onProgress({ processed, total: ids.length, success: successCount, failed: failedCount });
+        processed += 1;
+        report();
+      }
     }
   }
 

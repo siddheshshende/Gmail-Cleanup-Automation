@@ -1,9 +1,5 @@
-#!/usr/bin/env node
-// Gmail Cleanup CLI entry point.
-//
-// Safety invariant: running `node index.js` with no arguments (or an
-// unrecognized command) MUST NEVER modify Gmail. Only the explicit `delete`
-// command can, and even then only after a typed "DELETE" confirmation.
+
+// Gmail Cleanup CLI entry point
 
 import { runCount } from './src/commands/count.js';
 import { runPreview } from './src/commands/preview.js';
@@ -54,9 +50,7 @@ async function main() {
   const command = argv[0];
 
   const dryRun = argv.includes('--dry-run');
-  // Distinguish "no query argument given" (use the default) from an
-  // explicitly passed empty string (must be rejected, not silently
-  // replaced with the default) — `||` alone would conflate the two.
+
   const positionalArgs = argv.slice(1).filter((arg) => !arg.startsWith('--'));
   const query = positionalArgs.length > 0 ? positionalArgs[0] : DEFAULT_QUERY;
 
