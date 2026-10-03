@@ -19,6 +19,10 @@
     "@google-cloud/local-auth": "^3.0.1",
     "googleapis": "^144.0.0"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/siddheshshende/Gmail-Cleanup-Automation.git"
+  },
   "private": true
 }

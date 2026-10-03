@@ -47,9 +47,6 @@ export function formatNumber(n) {
   return n.toLocaleString('en-US');
 }
 
-// Renders a fixed-width progress bar plus a "processed / total" line.
-// Called repeatedly during batch operations; overwrites the previous line
-// in-place when running in a real TTY, otherwise falls back to plain logs.
 export function renderProgress({ processed, total, success: ok, failed }) {
   const width = 24;
   const ratio = total > 0 ? processed / total : 0;

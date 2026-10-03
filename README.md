@@ -63,9 +63,14 @@ thousands** of messages, while staying safe by default.
 1. Go to **APIs & Services → OAuth consent screen**.
 2. Choose **External** (unless you have a Google Workspace org) and fill in
    the required fields (app name, support email).
-3. Add yourself as a **test user** if the app stays in "Testing" mode — that
-   is fine for personal use and avoids needing Google's app review, since
-   you'll only ever sign in as yourself.
+3. Add yourself as a **test user**. Then pick a publishing status:
+   - **Testing** (the default) works immediately, but Google expires the
+     saved sign-in **every 7 days**, so you'll see `invalid_grant` and have
+     to sign in again weekly.
+   - **In production** keeps you signed in. For an app only you use, you
+     don't need Google's verification: click **Publish app**, and on first
+     sign-in Google shows a "Google hasn't verified this app" screen. Since
+     it's your own app, choose **Advanced → Go to (your app name)**.
 4. Add the scope `https://www.googleapis.com/auth/gmail.modify` under
    **Scopes** (or add it when consenting during sign-in — Google will prompt
    for it).
@@ -86,23 +91,38 @@ credentials](https://developers.google.com/workspace/guides/create-credentials#o
 
 ## 5. Place `credentials.json`
 
-Rename the downloaded file to exactly `credentials.json` and place it at the
-**project root** — next to `index.js` and `package.json`:
+Rename the downloaded file to exactly `credentials.json` and put it in the
+tool's config folder in your home directory — **outside** the project, so it
+can never be committed by accident:
 
-```
-gmail-cleanup/
-├── credentials.json   <-- here
-├── index.js
-├── package.json
-└── ...
-```
-
-This file identifies your OAuth *client* (not your account). It is listed in
-`.gitignore` and must never be committed or shared — see **Security** below.
-
-## 6. Install dependencies
+| OS | Path |
+|---|---|
+| Windows | `%USERPROFILE%\.gmail-cleanup\credentials.json` |
+| macOS / Linux | `~/.gmail-cleanup/credentials.json` |
 
 ```bash
+# macOS / Linux
+mkdir -p ~/.gmail-cleanup && mv ~/Downloads/client_secret_*.json ~/.gmail-cleanup/credentials.json
+```
+
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force "$HOME\.gmail-cleanup"
+Move-Item "$HOME\Downloads\client_secret_*.json" "$HOME\.gmail-cleanup\credentials.json"
+```
+
+To use a different folder, set `GMAIL_CLEANUP_HOME` (see **Environment
+variables**). Older setups with `credentials.json` at the project root still
+work; the tool falls back to it when the config folder has none.
+
+This file identifies your OAuth *client* (not your account) and must never be
+committed or shared — see **Security** below.
+
+## 6. Get the code and install dependencies
+
+```bash
+git clone https://github.com/siddheshshende/Gmail-Cleanup-Automation.git
+cd Gmail-Cleanup-Automation
 npm install
 ```
 
@@ -122,11 +142,13 @@ node index.js count
 ```
 
 This opens your default browser to Google's sign-in/consent screen. After
-you approve access, the tool saves an OAuth token to `token.json` in the
-project root and reuses it on every future run — you won't be prompted again
-unless you delete `token.json` or Google revokes access.
+you approve access, the tool saves an OAuth token to `token.json` next to
+your `credentials.json` and reuses it on every future run — you won't be
+prompted again unless you delete `token.json`, Google revokes access, or your
+OAuth app is in Testing mode (see step 3).
 
-`token.json` is also listed in `.gitignore` — see **Security** below.
+`token.json` is effectively a password to your mailbox — see **Security**
+below.
 
 ## Usage
 
@@ -231,7 +253,7 @@ in:inbox category:promotions
 in:inbox is:unread older_than:2y
 ```
 
-## Messages vs. conversations — an important distinction
+## Messages vs. conversations — an important distinction claude --resume 5be93a18-8a25-4387-8cc6-99f4f0819384
 
 The Gmail **web UI** displays and counts **conversations (threads)** — a
 single thread can bundle many back-and-forth messages together as one row.
@@ -283,15 +305,17 @@ counting different units. `count` and `preview` print a reminder of this.
 | Variable            | Default | Purpose                                      |
 |----------------------|---------|-----------------------------------------------|
 | `GMAIL_BATCH_SIZE`    | `50`    | Message IDs per `batchModify` request.        |
+| `GMAIL_CLEANUP_HOME`  | `~/.gmail-cleanup` | Folder holding `credentials.json` and `token.json`. |
 
 No Gmail address, client ID/secret, or token is ever read from environment
-variables or hardcoded — they live only in the git-ignored `credentials.json`
-and `token.json` files described above.
+variables or hardcoded — they live only in the `credentials.json` and
+`token.json` files described above.
 
 ## Security
 
-- **Never commit `credentials.json` or `token.json`.** Both are listed in
-  `.gitignore`.
+- **Never commit or share `credentials.json` or `token.json`.** By default
+  they live in `~/.gmail-cleanup/`, outside the repository, and both names
+  are also in `.gitignore` in case you keep them at the project root.
   - `credentials.json` identifies your OAuth *client* — if leaked, someone
     could impersonate your app when requesting access (they'd still need a
     user to approve consent, but it's still a private identifier you
@@ -316,7 +340,8 @@ If you ever want to revoke this tool's access to your Google account:
    access](https://myaccount.google.com/permissions).
 2. Find the app you named when creating the OAuth client, and click
    **Remove Access**.
-3. Delete the local `token.json` file.
+3. Delete `token.json` from your config folder (`~/.gmail-cleanup/` by
+   default).
 
 The next run will require signing in again.
 
@@ -328,8 +353,9 @@ The tool tries to surface understandable errors for:
 - Invalid/corrupted `credentials.json` or `token.json` (falls back to
   re-authenticating).
 - OAuth sign-in cancelled or denied in the browser.
-- Expired/invalid tokens (HTTP 401) — tells you to delete `token.json` and
-  re-run.
+- Expired/invalid tokens (HTTP 401) — tells you the exact `token.json` to
+  delete before re-running. A weekly `invalid_grant` means your OAuth app is
+  in Testing mode; see step 3.
 - Gmail API not enabled / scope not granted (HTTP 403).
 - Rate limiting (HTTP 429) — retried automatically with backoff, then
   reported if it still fails.
@@ -341,9 +367,11 @@ The tool tries to surface understandable errors for:
 ## Project structure
 
 ```
-gmail-cleanup/
-├── credentials.json       # Your OAuth client (you provide this; git-ignored)
-├── token.json             # Generated after first sign-in (git-ignored)
+~/.gmail-cleanup/          # Per-user config folder (outside the repo)
+├── credentials.json       # Your OAuth client (you provide this)
+└── token.json             # Generated after first sign-in
+
+Gmail-Cleanup-Automation/
 ├── src/
 │   ├── auth.js             # OAuth 2.0 flow, token load/save
 │   ├── gmail.js             # Gmail API: pagination, sampling, batch trash, retry
@@ -355,6 +383,7 @@ gmail-cleanup/
 ├── index.js                # CLI entry point / argument parsing / help text
 ├── package.json
 ├── .gitignore
+├── LICENSE
 └── README.md
 ```
 
@@ -370,3 +399,9 @@ npm run delete:dry  # safe to run anytime — makes no changes
 
 `npm run delete` is the only command that can modify your Gmail account, and
 only after you type `DELETE` at its prompt.
+
+## License
+
+[MIT](LICENSE) — free to use, modify, and share. Provided as-is, with no
+warranty: this tool modifies your mailbox, so start with `count`, `preview`,
+and `delete --dry-run`.

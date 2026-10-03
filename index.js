@@ -1,10 +1,10 @@
-
+#!/usr/bin/env node
 // Gmail Cleanup CLI entry point
 
 import { runCount } from './src/commands/count.js';
 import { runPreview } from './src/commands/preview.js';
 import { runDelete } from './src/commands/delete.js';
-import { AuthError } from './src/auth.js';
+import { AuthError, TOKEN_PATH } from './src/auth.js';
 import { error, warn, DEFAULT_QUERY } from './src/utils.js';
 
 function printHelp() {
@@ -83,7 +83,7 @@ main().catch((err) => {
   } else if (err?.code === 401 || err?.response?.status === 401) {
     error(
       'Gmail rejected the request as unauthorized. Your token may have been ' +
-        'revoked. Delete token.json and run the command again to re-authenticate.'
+        `revoked or expired. Delete ${TOKEN_PATH} and run the command again to re-authenticate.`
     );
   } else if (err?.code === 403 || err?.response?.status === 403) {
     error(
